@@ -8,6 +8,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      GRADLE_USER_HOME: ${{ github.workspace }}/.gradle
+
     steps:
       - uses: actions/checkout@v4
 
@@ -22,7 +25,7 @@ jobs:
 
       - uses: android-actions/setup-android@v3
 
-      # ✅ Installer Gradle 8.13 (au lieu du Gradle 9.x du runner)
+      # ✅ Installer Gradle 8.13 (évite le Gradle 9.x du runner)
       - name: Install Gradle 8.13
         run: |
           set -e
@@ -33,33 +36,40 @@ jobs:
 
       - name: Install Android SDK packages
         run: |
-          sdkmanager --install \
-            "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0"
+          sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
           yes | sdkmanager --licenses
 
       - name: Install Cordova
         run: npm i -g cordova
 
-      # ✅ Repartir propre + version stable
       - name: Prepare Cordova Android platform
         run: |
           cordova platform rm android || true
           cordova platform add android@12.0.1
 
-      # ✅ Générer le wrapper avec Gradle 8.13 (évite l’appel au Gradle 9.3)
-      - name: Generate Gradle wrapper (compatible)
+      # ✅ Reproduire EXACTEMENT l’étape qui échoue, mais avec logs complets
+      - name: Debug wrapper step (stacktrace+info)
         run: |
+          set -e
           cd platforms/android
-          gradle wrapper --gradle-version 8.13
-          ./gradlew -v
+          echo "== Running wrapper.gradle with verbose logs =="
+          gradle -p "$PWD" wrapper -b "$PWD/wrapper.gradle" --stacktrace --info --no-daemon
 
-      - name: Build Debug APK
+      - name: Build Debug APK (verbose)
         run: |
           cordova build android --debug -- --stacktrace --info --no-daemon
 
-      - uses: actions/upload-artifact@v4
+      # ✅ Uploader aussi le rapport problems (si généré)
+      - name: Upload Gradle problem report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-problems-report
+          path: platforms/android/build/reports/problems/**
+
+      - name: Upload APK
+        if: success()
+        uses: actions/upload-artifact@v4
         with:
           name: Nanopay-APK
           path: platforms/android/app/build/outputs/apk/debug/*.apk
