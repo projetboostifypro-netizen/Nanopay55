@@ -8,7 +8,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
@@ -21,21 +20,43 @@ jobs:
           distribution: "temurin"
           java-version: "17"
 
-      # ✅ installe Android SDK automatiquement
       - uses: android-actions/setup-android@v3
 
-      - name: Install SDK packages
+      - name: Install Android SDK packages
         run: |
-          sdkmanager --install "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+          sdkmanager --install \
+            "platform-tools" \
+            "platforms;android-34" \
+            "platforms;android-35" \
+            "build-tools;34.0.0" \
+            "build-tools;35.0.0"
           yes | sdkmanager --licenses
 
-      - run: npm i -g cordova
+      - name: Install Cordova
+        run: npm i -g cordova
 
-      - run: cordova platform add android || true
+      # ✅ On repart propre + version stable
+      - name: Prepare Cordova Android platform
+        run: |
+          cordova platform rm android || true
+          cordova platform add android@12.0.1
 
-      - run: cordova requirements || true
+      - name: Show requirements
+        run: cordova requirements || true
 
-      - run: cordova build android --debug
+      # ✅ Logs complets pour voir la VRAIE erreur
+      - name: Build Debug APK (verbose)
+        run: |
+          set +e
+          cordova build android --debug -- --stacktrace --info --no-daemon
+          code=$?
+          echo "Cordova build exit code: $code"
+          # Affiche les logs Gradle si dispo
+          if [ -f "platforms/android/app/build/outputs/logs/log.txt" ]; then
+            echo "----- Gradle log (last 300 lines) -----"
+            tail -n 300 platforms/android/app/build/outputs/logs/log.txt || true
+          fi
+          exit $code
 
       - uses: actions/upload-artifact@v4
         with:
