@@ -22,41 +22,42 @@ jobs:
 
       - uses: android-actions/setup-android@v3
 
+      # ✅ Installer Gradle 8.13 (au lieu du Gradle 9.x du runner)
+      - name: Install Gradle 8.13
+        run: |
+          set -e
+          curl -L -o gradle.zip https://services.gradle.org/distributions/gradle-8.13-bin.zip
+          unzip -q gradle.zip -d $HOME/gradle
+          echo "$HOME/gradle/gradle-8.13/bin" >> $GITHUB_PATH
+          gradle -v
+
       - name: Install Android SDK packages
         run: |
           sdkmanager --install \
             "platform-tools" \
-            "platforms;android-34" \
             "platforms;android-35" \
-            "build-tools;34.0.0" \
             "build-tools;35.0.0"
           yes | sdkmanager --licenses
 
       - name: Install Cordova
         run: npm i -g cordova
 
-      # ✅ On repart propre + version stable
+      # ✅ Repartir propre + version stable
       - name: Prepare Cordova Android platform
         run: |
           cordova platform rm android || true
           cordova platform add android@12.0.1
 
-      - name: Show requirements
-        run: cordova requirements || true
-
-      # ✅ Logs complets pour voir la VRAIE erreur
-      - name: Build Debug APK (verbose)
+      # ✅ Générer le wrapper avec Gradle 8.13 (évite l’appel au Gradle 9.3)
+      - name: Generate Gradle wrapper (compatible)
         run: |
-          set +e
+          cd platforms/android
+          gradle wrapper --gradle-version 8.13
+          ./gradlew -v
+
+      - name: Build Debug APK
+        run: |
           cordova build android --debug -- --stacktrace --info --no-daemon
-          code=$?
-          echo "Cordova build exit code: $code"
-          # Affiche les logs Gradle si dispo
-          if [ -f "platforms/android/app/build/outputs/logs/log.txt" ]; then
-            echo "----- Gradle log (last 300 lines) -----"
-            tail -n 300 platforms/android/app/build/outputs/logs/log.txt || true
-          fi
-          exit $code
 
       - uses: actions/upload-artifact@v4
         with:
